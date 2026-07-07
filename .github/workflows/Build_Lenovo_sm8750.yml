@@ -781,7 +781,7 @@ jobs:
           cd kernel_workspace/common/out/arch/arm64/boot
           curl -LO https://github.com/ShirkNeko/SukiSU_KernelPatch_patch/releases/download/0.12.2/patch_linux
           chmod +x patch_linux
-          ./patch_linux
+          ./patch_linux -p -s 123 -i Image -k kpimg -o oImage
           rm -f Image
           mv oImage Image
           
