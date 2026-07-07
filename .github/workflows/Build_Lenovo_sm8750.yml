@@ -777,14 +777,30 @@ jobs:
       - name: 📦 Apply KPM and patch the kernel (应用KPM并修补内核)
         if: ${{ env.ENABLE_KPM == 'true' }}
         run: |
-          echo "正在应用KPM并修补内核..."
+          echo "=== 修补 Image 文件 (KPM) ==="
           cd kernel_workspace/common/out/arch/arm64/boot
-          curl -LO https://github.com/ShirkNeko/SukiSU_KernelPatch_patch/releases/download/0.13.0/patch_linux
-          curl -LO https://github.com/ShirkNeko/SukiSU_KernelPatch_patch/releases/download/0.13.0/kpimg
-          chmod +x patch_linux
-          ./patch_linux -p -s 123 -i Image -k kpimg -o oImage
-          rm -f Image
-          mv oImage Image
+
+          if [ ! -f Image ]; then
+            echo "::warning::Image 文件不存在,跳过 KPM 修补"
+            exit 0
+          fi
+
+          curl -LSs https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch/releases/download/0.13.0/kptools-linux -o kptools-linux && chmod +x kptools-linux || true
+          curl -LSs https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch/releases/download/0.13.0/kpimg -o kpimg || true
+
+          if [ ! -f kptools-linux ] || [ ! -f kpimg ]; then
+            echo "::warning::KPM 工具下载失败,跳过 KPM 修补"
+            exit 0
+          fi
+
+          ./kptools-linux -p -s 123 -i Image -k kpimg -o oImage || true
+
+          if [ -f oImage ]; then
+            mv oImage Image
+          else
+            echo "::warning::KPM 修补失败,未生成 oImage"
+          fi
+          
           
       - name: 📦 ReName Image  (修改镜像名)
         run: |
