@@ -89,6 +89,11 @@ on:
         required: false
         default: ''
 
+      kairos_ref:
+        description: "kairos 分支（默认 kairos-clean：已删除内核侧开机自启）"
+        required: false
+        default: 'kairos-clean'
+
       enable_signed:
         description: "使用AOSP密钥签名boot"
         required: false
@@ -116,6 +121,7 @@ jobs:
       ENABLE_KAIROS: ${{ github.event.inputs.enable_kairos }}
       NOVA_REF: ${{ github.event.inputs.nova_ref }}
       ACK_TAG: ${{ github.event.inputs.ack_tag }}
+      KAIROS_REF: ${{ github.event.inputs.kairos_ref }}
       ENABLE_SIGNED: ${{ github.event.inputs.enable_signed }}
     steps:
       - uses: actions/checkout@v5
@@ -614,7 +620,11 @@ jobs:
           cd kernel_workspace
           echo "==> 拉取 kairos 驱动源码"
           rm -rf kairos_src
-          git clone --depth=1 -b kairos-ko-test https://github.com/Xran66/GKI_BakaSU_SUSFS.git kairos_src
+          KREF="${KAIROS_REF:-kairos-ko-test}"
+          echo "kairos 分支: $KREF"
+          git clone --depth=1 -b "$KREF" https://github.com/Xran66/GKI_BakaSU_SUSFS.git kairos_src
+          echo "--- 确认自启代码已移除（应为空）---"
+          grep -rn 'call_usermodehelper\|memx_boot_payload' kairos_src/kairos/drivers/kairos/ || echo "  (已移除)" 
 
           echo "==> 拷入内核树"
           rm -rf ./common/drivers/kairos
@@ -636,6 +646,16 @@ jobs:
           if [ "$HIT_NET" -lt 1 ] || [ "$HIT_RB" -lt 1 ]; then
             echo "::warning::kairos 调用点注入不完整（net=$HIT_NET reboot=$HIT_RB），驱动会编译进内核但握手/通道可能不可用"
           fi
+
+          echo "==> 静默化 kairos 的 dmesg 输出"
+          # memx_ioctl.c 里每条 ioctl 都会 pr_err 一行，且把 magic 打出来：
+          #   pr_err("memx: op=0x%x uid=%d magic=%u ctx_magic=%u authed=%d\n", ...)
+          # 问题有三：① 每条命令一行，dmesg 被刷满；② magic 直接泄露给任何能读
+          # dmesg 的进程；③ "memx: op=" 是极好认的指纹。这里全部降级为 pr_debug
+          # （默认编译为 no-op，需要时可用 dynamic debug 打开）。
+          sed -i 's/pr_err("memx:/pr_debug("memx:/g; s/pr_info("memx:/pr_debug("memx:/g' ./common/drivers/kairos/*.c
+          echo "--- 残留的可疑日志（应为空）---"
+          grep -n 'pr_err("memx\|pr_info("memx' ./common/drivers/kairos/*.c || echo "  (无)"
 
           echo "==> 写入 MEMX 配置（只读，写入路径不编译）"
           DEF=./common/arch/arm64/configs/gki_defconfig
