@@ -849,30 +849,32 @@ jobs:
         run: |
           set -euo pipefail
           cd kernel_workspace/common/out/arch/arm64/boot
-          ls -lh Image
-
-          # SukiSU_patch/kpm/patch_linux 是官方 x86_64 工具：读当前目录的 Image，
-          # 解密内嵌 kptools + kpimg，把 kpimg 附加到 Image 尾部并改写启动入口，
-          # 产物固定为 oImage。
           BASE="https://raw.githubusercontent.com/SukiSU-Nova/SukiSU_patch/main/kpm"
+          SZ_BEFORE=$(stat -c%s Image)
+          echo "原始 Image: $SZ_BEFORE 字节"
+
+          # 注意：同目录下的 patch_linux 内嵌的是占位桩(仅 0x10 字节)，实测打进去
+          # 镜像尺寸不变、KPM 不可用。这里直接用 kptools-linux + 独立 kpimg。
           set +e
-          curl -LSs "$BASE/patch_linux" -o patch_linux
-          chmod +x patch_linux
-          ./patch_linux
+          curl -LSs "$BASE/kptools-linux" -o kptools-linux
+          curl -LSs "$BASE/kpimg"         -o kpimg
+          chmod +x kptools-linux
+          ./kptools-linux -p -s 123 -i Image -k kpimg -o oImage
           KP_RC=$?
           set -e
 
           if [ $KP_RC -ne 0 ] || [ ! -f oImage ]; then
-            echo "::warning::KernelPatch 注入失败(rc=$KP_RC)，本次产物不含 kpimg，KPM 加载 .kpm 模块会返回 -EOPNOTSUPP"
-            ls -lh Image || true
+            echo "::warning::KernelPatch 注入失败(rc=$KP_RC)，产物不含 kpimg，KPM 加载 .kpm 会返回 -EOPNOTSUPP"
           else
-            ls -lh Image oImage
-            # 保护校验：arm64 Image 的 magic "ARM\x64" 在偏移 0x38
-            if [ "$(dd if=oImage bs=1 skip=56 count=4 2>/dev/null)" = "ARM" ]; then
-              cp -f oImage Image
-              echo "✅ Image 已注入 kpimg（KPM 可用）"
+            SZ_AFTER=$(stat -c%s oImage)
+            DELTA=$((SZ_AFTER - SZ_BEFORE))
+            MAGIC=$(dd if=oImage bs=1 skip=56 count=3 2>/dev/null | tr -d '\0')
+            echo "kptools 产物: $SZ_AFTER 字节 (增量 $DELTA), magic=$MAGIC"
+            if [ "$MAGIC" != "ARM" ] || [ "$DELTA" -lt 200000 ]; then
+              echo "::warning::kpimg 未真正写入（magic=$MAGIC, delta=$DELTA < 200KB），保留原 Image"
             else
-              echo "::warning::oImage 头部 magic 异常，放弃替换，保留原 Image"
+              cp -f oImage Image
+              echo "✅ Image 已注入 kpimg（增量 $DELTA 字节，KPM 可用）"
             fi
           fi
 
