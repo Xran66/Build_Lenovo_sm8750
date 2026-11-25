@@ -94,6 +94,12 @@ on:
         required: false
         default: 'kairos-clean'
 
+      susfs_port:
+        description: "把 SUSFS 接进 Nova（实验：需 manual-hook API，当前会链接失败）"
+        required: false
+        default: false
+        type: boolean
+
       enable_signed:
         description: "使用AOSP密钥签名boot"
         required: false
@@ -122,6 +128,7 @@ jobs:
       NOVA_REF: ${{ github.event.inputs.nova_ref }}
       ACK_TAG: ${{ github.event.inputs.ack_tag }}
       KAIROS_REF: ${{ github.event.inputs.kairos_ref }}
+      SUSFS_PORT: ${{ github.event.inputs.susfs_port }}
       ENABLE_SIGNED: ${{ github.event.inputs.enable_signed }}
     steps:
       - uses: actions/checkout@v5
@@ -565,7 +572,7 @@ jobs:
           esac
 
       - name: 🧬 Port SUSFS into SukiSU-Nova (把 SUSFS 接进 Nova)
-        if: ${{ env.ENABLE_SUSFS == 'true' }}
+        if: ${{ env.ENABLE_SUSFS == 'true' && env.SUSFS_PORT == 'true' }}
         run: |
           set -euo pipefail
           cd kernel_workspace
@@ -784,7 +791,11 @@ jobs:
           fi
 
           # ==================== SUSFS 配置 ====================
-          if [ "${{ env.ENABLE_SUSFS }}" == 'true' ];then
+          # 说明：susfs4ksu 的 50_ 补丁在 fs/*.c 里调用的是 KernelSU 的 manual-hook API
+          # （ksu_handle_stat / ksu_is_input_hook_enabled / susfs_*_sid ...），
+          # Nova 用的是动态 hook 架构，没有这套函数，直接开 CONFIG_KSU_SUSFS 会在链接期
+          # undefined symbol。所以只有显式打开 susfs_port 才写这些配置。
+          if [ "${{ env.ENABLE_SUSFS }}" == 'true' ] && [ "${SUSFS_PORT}" == 'true' ];then
             echo "CONFIG_KSU_SUSFS=y" >> "$DEFCONFIG"
             echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> "$DEFCONFIG"
             echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> "$DEFCONFIG"
