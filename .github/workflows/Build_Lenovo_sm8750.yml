@@ -564,6 +564,25 @@ jobs:
               ;;
           esac
 
+      - name: 🧬 Port SUSFS into SukiSU-Nova (把 SUSFS 接进 Nova)
+        if: ${{ env.ENABLE_SUSFS == 'true' }}
+        run: |
+          set -euo pipefail
+          cd kernel_workspace
+          # 只补三块：Kconfig 菜单 / susfs_init() / ksu_handle_sys_reboot()
+          # 不复用 simonpunk 的 10_enable_susfs_for_ksu.patch，因为它会整体替换 Nova
+          # 的 supercall 架构（删掉 ksu_late_loaded / ksu_bundled / hook/*.o），
+          # 而其中的 kernel/supercall/dispatch.c 正是 KPM supercall 的宿主。
+          python3 "${{ github.workspace }}/scripts/nova_susfs_port.py" ./KernelSU
+
+          echo "--- Nova 侧接入结果 ---"
+          grep -c "^config KSU_SUSFS" ./KernelSU/kernel/Kconfig
+          grep -n "susfs_init()" ./KernelSU/kernel/core/init.c
+          grep -n "ksu_handle_sys_reboot" ./KernelSU/kernel/supercall/dispatch.c | head -3
+
+          echo "--- 内核侧 reboot.c 的 susfs 分发是否就位 ---"
+          grep -n "ksu_handle_sys_reboot" ./common/kernel/reboot.c | head -3
+
       - name: 🔧 Clone Droidspaces Patches (克隆 Droidspaces 补丁仓库)
         if: ${{ env.ENABLE_DROIDSPACES != 'off' }}
         run: |
