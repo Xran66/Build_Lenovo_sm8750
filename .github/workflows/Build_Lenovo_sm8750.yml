@@ -519,11 +519,22 @@ jobs:
           # 注意：上游 kernel/setup.sh 会从自建 git (git.zako.shirkneko.top) 拉源码，
           # CI 里改成 GitHub 官方仓库，避免依赖第三方源；挂载方式与 setup.sh 完全一致。
           rm -rf KernelSU
-          git clone https://github.com/SukiSU-Nova/SukiSU-Nova.git KernelSU
+          git clone --branch builtin https://github.com/SukiSU-Nova/SukiSU-Nova.git KernelSU
           cd KernelSU
+          # 分支选择（与上游 AnyKernel3 工程一致）：
+          #   SUSFS 关闭 -> main      （纯内建，无 SUSFS 代码）
+          #   SUSFS 开启 -> builtin   （内建 + SUSFS 产品线：Kconfig 自带 KSU_SUSFS*，
+          #                            supercall/dispatch.c 自带 ksu_handle_sys_reboot，
+          #                            同时保留 KPM / cpu_spoof / umount_paths）
           if [ -n "${NOVA_REF:-}" ]; then
             echo "==> 切到指定 ref: $NOVA_REF"
             git checkout "$NOVA_REF"
+          elif [ "${ENABLE_SUSFS}" = "true" ]; then
+            echo "==> SUSFS 开启，使用 builtin 分支"
+            git checkout builtin
+          else
+            echo "==> SUSFS 关闭，使用 main 分支"
+            git checkout main
           fi
           NOVA_SHA=$(git rev-parse --short=8 HEAD)
           KSU_VERSION=$(expr $(git rev-list --count HEAD 2>/dev/null || echo 0) + 30000)
@@ -778,7 +789,10 @@ jobs:
 
           # ==================== KSU 配置（SukiSU-Nova）====================
           echo "CONFIG_KSU=y" >> "$DEFCONFIG"
-          echo "CONFIG_KSU_MANUAL_SU=y" >> "$DEFCONFIG"
+          # builtin 分支没有 KSU_MANUAL_SU 这个选项，写了会被当成未知符号丢掉，这里先判断
+          if grep -qsE '^[[:space:]]*config[[:space:]]+KSU_MANUAL_SU([[:space:]]|$)' ./KernelSU/kernel/Kconfig; then
+            echo "CONFIG_KSU_MANUAL_SU=y" >> "$DEFCONFIG"
+          fi
 
           # ---- KPM（Kernel Patch Module）----
           if [ "${ENABLE_KPM}" == 'true' ]; then
@@ -791,11 +805,9 @@ jobs:
           fi
 
           # ==================== SUSFS 配置 ====================
-          # 说明：susfs4ksu 的 50_ 补丁在 fs/*.c 里调用的是 KernelSU 的 manual-hook API
-          # （ksu_handle_stat / ksu_is_input_hook_enabled / susfs_*_sid ...），
-          # Nova 用的是动态 hook 架构，没有这套函数，直接开 CONFIG_KSU_SUSFS 会在链接期
-          # undefined symbol。所以只有显式打开 susfs_port 才写这些配置。
-          if [ "${{ env.ENABLE_SUSFS }}" == 'true' ] && [ "${SUSFS_PORT}" == 'true' ];then
+          # builtin 分支的 kernel/Kconfig 自带 KSU_SUSFS* 全部符号
+          # （main 分支没有，所以 SUSFS 关闭时才用 main）。
+          if [ "${{ env.ENABLE_SUSFS }}" == 'true' ];then
             echo "CONFIG_KSU_SUSFS=y" >> "$DEFCONFIG"
             echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> "$DEFCONFIG"
             echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> "$DEFCONFIG"
