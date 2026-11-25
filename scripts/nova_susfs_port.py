@@ -211,9 +211,9 @@ SUSFS_DISPATCH = r"""int ksu_handle_sys_reboot(int magic1, int magic2, unsigned 
         }
     }
 
-    if (magic2 == KSU_INSTALL_MAGIC2)
-        return ksu_supercall_reboot_handler(arg);
-
+    /* 注意：原补丁在这里还会调 ksu_supercall_reboot_handler()，那是旧版 KernelSU 的
+     * 符号。Nova 把 KSU_INSTALL_MAGIC2 的信令放在 supercall/supercall.c 里处理，
+     * 这里只负责 SUSFS 那一路，其它 magic 一律交回 reboot 主流程。 */
     return -EINVAL;
 }
 """
