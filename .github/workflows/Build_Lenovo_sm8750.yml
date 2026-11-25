@@ -529,6 +529,26 @@ jobs:
 
           echo "✅ NTSync 补丁应用完成"
 
+      - name: 🧩 Integrate kairos (MEMX) read-only driver
+        run: |
+          set -e
+          cd kernel_workspace
+          echo "==> 拉取 kairos 驱动源码"
+          git clone --depth=1 -b kairos-ko-test https://github.com/Xran66/GKI_BakaSU_SUSFS.git kairos_src
+          echo "==> 拷入内核树"
+          cp -r kairos_src/kairos/drivers/kairos ./common/drivers/
+          grep -q 'drivers/kairos/Kconfig' ./common/drivers/Kconfig || echo 'source "drivers/kairos/Kconfig"' >> ./common/drivers/Kconfig
+          grep -q 'kairos/' ./common/drivers/Makefile || echo 'obj-$(CONFIG_MEMX) += kairos/' >> ./common/drivers/Makefile
+          echo "==> 注入源码级调用点 (net/socket.c, kernel/reboot.c)"
+          python3 kairos_src/kairos/patches/inject_hooks.py ./common
+          echo "==> 写入 MEMX 配置"
+          DEF=./common/arch/arm64/configs/gki_defconfig
+          for c in CONFIG_MEMX=y CONFIG_MEMX_GYRO_HOOK=y; do
+            grep -q "^${c}" $DEF || echo "$c" >> $DEF
+          done
+          grep -n "CONFIG_MEMX" $DEF
+          echo "✅ kairos 集成完成"
+
       - name: 🔧 Set gki_defconfig (设置编译配置)
         run: |
           cd kernel_workspace
