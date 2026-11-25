@@ -84,6 +84,11 @@ on:
         required: false
         default: ''
 
+      ack_tag:
+        description: "改用 ACK 源码（填标签，如 android15-6.6.139_r00；留空=用工程自带 tarball）"
+        required: false
+        default: ''
+
       enable_signed:
         description: "使用AOSP密钥签名boot"
         required: false
@@ -110,6 +115,7 @@ jobs:
       ENABLE_KPM: ${{ github.event.inputs.enable_kpm }}
       ENABLE_KAIROS: ${{ github.event.inputs.enable_kairos }}
       NOVA_REF: ${{ github.event.inputs.nova_ref }}
+      ACK_TAG: ${{ github.event.inputs.ack_tag }}
       ENABLE_SIGNED: ${{ github.event.inputs.enable_signed }}
     steps:
       - uses: actions/checkout@v5
@@ -118,6 +124,14 @@ jobs:
       - name: ⚙️ Set Kernel version config(设置对应内核版本配置文件)
         run: |
           echo "KERNEL_TIME=${{ env.CUSTOM_KERNEL_TIME }}" >> $GITHUB_ENV
+          if [ -n "${ACK_TAG:-}" ]; then
+            echo "==> ACK 模式：$ACK_TAG，跳过 tarball / releases 映射"
+            echo "os_patch_level=none" >> $GITHUB_ENV
+            echo "releases=none"         >> $GITHUB_ENV
+            echo "DEFAULT_SUFFIX="       >> $GITHUB_ENV
+            echo "KERNEL_TIME=Thu Jan  1 00:00:00 UTC 2026" >> $GITHUB_ENV
+            exit 0
+          fi
           case "${{ env.KERNEL_VERSION }}" in
             "6.6.56")
               echo "os_patch_level=2024-11" >> $GITHUB_ENV
@@ -195,11 +209,24 @@ jobs:
           sudo cp -f ./ccache /usr/bin/ccache &&
           sudo chmod +x /usr/bin/ccache &&
           rm -f ./ccache &
+          if [ -n "${ACK_TAG:-}" ]; then
+            echo "正在从 ACK 克隆 $ACK_TAG ..."
+            git clone --depth 1 --branch "$ACK_TAG" \
+              https://android.googlesource.com/kernel/common common || \
+            git clone --depth 1 --branch "$ACK_TAG" \
+              https://github.com/aosp-mirror/kernel_common common
+            # 用源码里的真实版本号覆盖 KERNEL_VERSION
+            KV=$(awk '/^VERSION =/{v=$3} /^PATCHLEVEL =/{p=$3} /^SUBLEVEL =/{s=$3} END{print v"."p"."s}' common/Makefile)
+            echo "ACK 源码版本: $KV"
+            echo "KERNEL_VERSION=$KV" >> $GITHUB_ENV
+            echo "KERNEL_VERSION=$KV" >> $GITHUB_OUTPUT 2>/dev/null || true
+          else
           echo "正在克隆源码仓库..."
           aria2c -s16 -x16 -k1M "https://github.com/showdo/Build_Lenovo_sm8750/releases/download/common/${{ env.os_patch_level }}.tar.gz" -o common.tar.gz && \
           mkdir -p common && \
           tar -xzf common.tar.gz -C common && \
           rm -f common.tar.gz &
+          fi
 
           
           echo "正在克隆llvm-clang18工具链..." &&
@@ -954,7 +981,7 @@ jobs:
          path: kernel_workspace/common/out/arch/arm64/boot/kernel
          
       - name: 📦 Sign boot using AOSP test key (使用AOSP测试密钥签名boot)
-        if: ${{ env.ENABLE_SIGNED == 'true' }}
+        if: ${{ env.ENABLE_SIGNED == 'true' && env.ACK_TAG == '' }}
         run: |
           cd kernel_workspace
           aria2c -s16 -x16 -k1M "https://github.com/showdo/AOSP-Testkey-BootSigner/archive/refs/heads/main.tar.gz" -o boot_avb_tool.tar.gz && \
@@ -971,7 +998,7 @@ jobs:
           python3 rebuild_avb.py --chained-mode
 
       - name: 📤 Upload Signed boot (上传已签名的 boot)
-        if: ${{ env.ENABLE_SIGNED == 'true' }}
+        if: ${{ env.ENABLE_SIGNED == 'true' && env.ACK_TAG == '' }}
         uses: actions/upload-artifact@v5
         with:
          name: Boot_${{ env.KSUVER }}_${{ env.KERNEL_VERSION }}_SukiSU-Nova_AOSP_Signed
