@@ -566,13 +566,15 @@ jobs:
         if: ${{ env.ENABLE_SUSFS == 'true' }}
         run: |
           cd kernel_workspace
-          git clone https://github.com/cctv18/susfs4oki.git susfs4ksu -b oki-android15-6.6
-          # 锁定 susfs 版本：2026-11-01 94b49475（priority filter 内核实现；位于 11-08 v2.4.0 bump 与 11-15 泄露 sync 之前；配 Nova 1cfa5734 同日组合，含 10-29 selinux_hide 修复）
-          git -C susfs4ksu checkout 94b49475f165297ea86721637879a55c1dd25a29
+          # susfs 锁定 2026-10-29（官方 simonpunk/susfs4ksu @ 93114563, v2.3.0）：vendored 于仓库
+          # susfs_files/（CI 对 gitlab 锁定 commit 的 git 传输缺失 tree 对象，raw API 节点不一致，
+          # vendored 是唯一稳定路径）。接口与 Nova builtin tip 全部兼容（实测 5/5）。
+          # 含 priority_uid_filter（10-24 起），避开 11-15 sus_path_uid_filter 泄露版。
+          cp "$GITHUB_WORKSPACE/susfs_files/50_add_susfs_in_gki-android15-6.6.patch" ./common/
+          cp "$GITHUB_WORKSPACE/susfs_files/fs/susfs.c" ./common/fs/susfs.c
+          cp "$GITHUB_WORKSPACE/susfs_files/include_linux/susfs.h" ./common/include/linux/susfs.h
+          cp "$GITHUB_WORKSPACE/susfs_files/include_linux/susfs_def.h" ./common/include/linux/susfs_def.h
           wget https://raw.githubusercontent.com/cctv18/oppo_oplus_realme_sm8750/main/other_patch/69_hide_stuff.patch -O ./common/69_hide_stuff.patch
-          cp ./susfs4ksu/kernel_patches/50_add_susfs_in_gki-android15-6.6.patch ./common/
-          cp ./susfs4ksu/kernel_patches/fs/* ./common/fs/
-          cp ./susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
           cd ./common
           patch -p1 < 50_add_susfs_in_gki-android15-6.6.patch || true
           patch -p1 -N -F 3 < 69_hide_stuff.patch || true
@@ -824,6 +826,7 @@ jobs:
             echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> "$DEFCONFIG"
             echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> "$DEFCONFIG"
             echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$DEFCONFIG"
+            echo "CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER=y" >> "$DEFCONFIG"
             echo "CONFIG_KSU_SUSFS_SUS_MAP=y" >> "$DEFCONFIG"
           else
             echo "未启用SUSFS 跳过SUSFS配置"
