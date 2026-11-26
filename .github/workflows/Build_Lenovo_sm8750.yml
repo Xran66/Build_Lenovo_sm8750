@@ -567,8 +567,8 @@ jobs:
         run: |
           cd kernel_workspace
           git clone https://github.com/cctv18/susfs4oki.git susfs4ksu -b oki-android15-6.6
-          # 锁定 susfs 版本：2026-10-14（10月29日锁定要求：含 selinux_hide 修复，不含 11-15 sync —— 其后的 susfs 会造成 SELinux 泄露）
-          git -C susfs4ksu checkout 3f6aae536724af0df3dfa15f932034d14a5dbc5c
+          # 锁定 susfs 版本：2026-11-01 94b49475（priority filter 内核实现；位于 11-08 v2.4.0 bump 与 11-15 泄露 sync 之前；配 Nova 1cfa5734 同日组合，含 10-29 selinux_hide 修复）
+          git -C susfs4ksu checkout 94b49475f165297ea86721637879a55c1dd25a29
           wget https://raw.githubusercontent.com/cctv18/oppo_oplus_realme_sm8750/main/other_patch/69_hide_stuff.patch -O ./common/69_hide_stuff.patch
           cp ./susfs4ksu/kernel_patches/50_add_susfs_in_gki-android15-6.6.patch ./common/
           cp ./susfs4ksu/kernel_patches/fs/* ./common/fs/
