@@ -304,10 +304,18 @@ def main():
             if "susfs_init()" in m:
                 print("  [skip] builtin ksu_main.c 已调用 susfs_init()")
                 if "#include <linux/susfs.h>" not in m:
-                    m = m.replace('#include "kernel_includes.h"',
-                                  '#include <linux/susfs.h>\n#include "kernel_includes.h"', 1)
+                    # 插到 kernel_includes.h 之后（cred.h 等先就位，susfs_def.h 的
+                    # current_uid() 才可用；插前面会 implicit declaration 编译错）
+                    if '#include "kernel_includes.h"' in m:
+                        m = m.replace('#include "kernel_includes.h"',
+                                      '#include "kernel_includes.h"\n#include <linux/susfs.h>', 1)
+                    else:
+                        # 兜底：cred.h 前置
+                        m = m.replace('#include <linux/susfs.h>',
+                                      '#include <linux/cred.h>\n#include <linux/susfs.h>', 1) \
+                            if "#include <linux/susfs.h>" in m else m
                     write(km, m)
-                    print("  [ok]   ksu_main.c += #include <linux/susfs.h>")
+                    print("  [ok]   ksu_main.c += #include <linux/susfs.h> (after kernel_includes.h)")
             else:
                 die("builtin ksu_main.c 缺少 susfs_init() 调用")
         else:
