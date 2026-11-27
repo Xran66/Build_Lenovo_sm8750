@@ -724,6 +724,16 @@ jobs:
             HIT_RB=$(grep -c 'm3mx' ./common/kernel/reboot.c 2>/dev/null || echo 0)
             echo "符号隐藏后注入点命中（net=$HIT_NET reboot=$HIT_RB）"
             echo "✅ MEMX 符号隐藏完成"
+            # ---- kallsyms 显示过滤：app 读 /proc/kallsyms 时 m3mx_ 前缀符号不出表 ----
+            # 防全量 diff 检测（真机无这些符号，改前缀防不住枚举对比）。
+            # 6.6 fs/proc/kallsyms.c 的 s_show() 在符号输出前按前缀跳过。
+            KSY=./common/fs/proc/kallsyms.c
+            if grep -q '%pK %c %s' "$KSY"; then
+              perl -0pi -e 's/(seq_printf\(m, "%pK %c %s)/if (strncmp(iter->name, "m3mx_", 5) == 0) return 0;\n\t\t$1/' "$KSY"
+              grep -q 'strncmp(iter->name, "m3mx_"' "$KSY" && echo "✅ kallsyms m3mx_ 前缀过滤已注入" || echo "::warning::kallsyms 过滤注入失败"
+            else
+              echo "::warning::kallsyms.c 输出格式锚点未匹配，请人工确认 6.6 的 s_show 结构"
+            fi
           fi
 
           echo "==> 写入 MEMX 配置（只读，写入路径不编译）"
