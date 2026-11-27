@@ -542,6 +542,15 @@ jobs:
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           echo "ksuver=$KSU_VERSION" >> $GITHUB_OUTPUT
           echo "==> Nova commit: $NOVA_SHA  version: $KSU_VERSION"
+          # ---- selinux_hide seqno 对齐修复（builtin/main 通用）----
+          # my_write_access 硬编码 avd.seqno=1，而 fake_status 的 sequence 是开机真值
+          # （policyload 后 >=2），检测器对 selinuxfs 内部一致性检查即发现不一致（泄露）。
+          # 修复：access 返回的 seqno 动态取 fake_status 页的 sequence，两者恒一致。
+          if [ -f ./KernelSU/kernel/feature/selinux_hide.c ]; then
+            perl -0pi -e 's/\bavd\.seqno = 1;/avd.seqno = (fake_status) ? ((struct selinux_kernel_status *)page_address(fake_status))->sequence : 1;/' ./KernelSU/kernel/feature/selinux_hide.c
+            grep -c "page_address(fake_status))->sequence" ./KernelSU/kernel/feature/selinux_hide.c && echo "✅ selinux_hide seqno aligned" || echo "::warning::selinux_hide seqno patch missed"
+          fi
+
           cd ..
 
           # 挂到内核树（等价 kernel/setup.sh 的三步）
