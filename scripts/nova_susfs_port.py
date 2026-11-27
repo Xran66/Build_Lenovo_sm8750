@@ -303,6 +303,11 @@ def main():
             m = read(km)
             if "susfs_init()" in m:
                 print("  [skip] builtin ksu_main.c 已调用 susfs_init()")
+                if "#include <linux/susfs.h>" not in m:
+                    m = m.replace('#include "kernel_includes.h"',
+                                  '#include <linux/susfs.h>\n#include "kernel_includes.h"', 1)
+                    write(km, m)
+                    print("  [ok]   ksu_main.c += #include <linux/susfs.h>")
             else:
                 die("builtin ksu_main.c 缺少 susfs_init() 调用")
         else:
