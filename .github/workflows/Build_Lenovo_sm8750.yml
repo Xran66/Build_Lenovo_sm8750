@@ -608,7 +608,7 @@ jobs:
 
           echo "--- Nova 侧接入结果 ---"
           grep -c "^config KSU_SUSFS" ./KernelSU/kernel/Kconfig
-          grep -n "susfs_init()" ./KernelSU/kernel/core/init.c
+          grep -n "susfs_init()" ./KernelSU/kernel/core/init.c 2>/dev/null || grep -n "susfs_init()" ./KernelSU/kernel/ksu_main.c
           grep -n "ksu_handle_sys_reboot" ./KernelSU/kernel/supercall/dispatch.c | head -3
 
           echo "--- 内核侧 reboot.c 的 susfs 分发是否就位 ---"
