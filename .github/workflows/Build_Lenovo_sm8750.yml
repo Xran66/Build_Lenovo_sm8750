@@ -716,7 +716,7 @@ jobs:
           if [ "${{ inputs.hide_memx_symbols }}" == 'true' ]; then
             echo "==> MEMX 符号隐藏（memx_ -> m3mx_，移除 /sys/module/KAIROS 占位）"
             find ./common/drivers/kairos -name "*.c" -o -name "*.h" | xargs sed -i 's/\bmemx_/m3mx_/g'
-            sed -i '/kobject_create_and_add("KAIROS"/d' ./common/drivers/kairos/m3mx_core.c
+            sed -i '/kobject_create_and_add("KAIROS"/d' ./common/drivers/kairos/memx_core.c
             sed -i 's/"KAIROS"/"M3X"/g' ./common/drivers/kairos/*.c
             # 注入点里的 memx 前缀引用同步改名（patch 步骤已注入的调用点）
             sed -i 's/\bmemx_/m3mx_/g' ./common/net/socket.c ./common/kernel/reboot.c
