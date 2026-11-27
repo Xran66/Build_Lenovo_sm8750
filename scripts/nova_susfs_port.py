@@ -295,11 +295,24 @@ def main():
         die("不是 KernelSU 仓库根目录（缺 kernel/）: " + root)
 
     insert_before_last_endmenu(os.path.join(k, "Kconfig"))
-    patch_init_c(os.path.join(k, "core", "init.c"))
+    # init.c 路径兼容两分支：main = core/init.c；builtin = ksu_main.c（已自带 susfs_init）
+    init_c = os.path.join(k, "core", "init.c")
+    if not os.path.exists(init_c):
+        km = os.path.join(k, "ksu_main.c")
+        if os.path.exists(km):
+            m = read(km)
+            if "susfs_init()" in m:
+                print("  [skip] builtin ksu_main.c 已调用 susfs_init()")
+            else:
+                die("builtin ksu_main.c 缺少 susfs_init() 调用")
+        else:
+            die("找不到 init.c 或 ksu_main.c: " + k)
+    else:
+        patch_init_c(init_c)
     patch_dispatch_c(os.path.join(k, "supercall", "dispatch.c"))
 
     kv = read(os.path.join(k, "Kconfig"))
-    ic = read(os.path.join(k, "core", "init.c"))
+    ic = read(os.path.join(k, "ksu_main.c")) if not os.path.exists(init_c) else read(init_c)
     dc = read(os.path.join(k, "supercall", "dispatch.c"))
     checks = [
         ("Kconfig:config KSU_SUSFS", "config KSU_SUSFS\n" in kv),
